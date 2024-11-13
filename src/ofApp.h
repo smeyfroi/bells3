@@ -8,9 +8,10 @@
 #include "FluidSimulation.h"
 #include "MaskShader.h"
 #include "ofxIntrospector.h"
-#include "ofxPlottable.h"
 #include "Constants.h"
 #include "ofxDividedArea.h"
+
+using DkmClusterResults = std::tuple<std::vector<std::array<float, 2>>, std::vector<uint32_t>>;
 
 class ofApp : public ofBaseApp{
   
@@ -34,6 +35,10 @@ public:
   void gotMessage(ofMessage msg) override;
   
 private:
+
+  void updateRecentNotes(float s, float t, float u, float v);
+  void updateClusters();
+  void decayClusters();
 
   // bells
 //    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
@@ -70,11 +75,9 @@ private:
   DividedArea dividedArea { {1.0, 1.0}, 7 };
 
   std::vector<std::array<float, 2>> recentNoteXYs;
-  std::tuple<std::vector<std::array<float, 2>>, std::vector<uint32_t>> clusterResults;
+  DkmClusterResults clusterResults;
   std::vector<glm::vec4> clusterCentres;
-  
-  Plottable plot { Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT }; // We draw in normalised coords so scale up for drawing and saving into a window-shaped viewport
-  
+
   Introspector introspector; // add things to this in normalised coords
   
   bool guiVisible { false };
@@ -97,7 +100,7 @@ private:
   ofParameterGroup clusterParameters { "cluster" };
   ofParameter<int> clusterCentresParameter { "clusterCentres", 12, 2.0, 50.0 };
   ofParameter<int> clusterSourceSamplesMaxParameter { "clusterSourceSamplesMax", 3000, 1000, 8000 }; // Note: 1600 raw samples per frame at 30fps
-  ofParameter<float> clusterDecayRateParameter { "clusterDecayRate", 1.1, 0.0, 5.0 };
+  ofParameter<float> clusterDecayRateParameter { "clusterDecayRate", 0.94, 0.0, 1.0 };
   ofParameter<float> sameClusterToleranceParameter { "sameClusterTolerance", 0.1, 0.01, 1.0 };
   ofParameter<int> sampleNoteClustersParameter { "sampleNoteClusters", 7, 1, 20 };
   ofParameter<int> sampleNotesParameter { "sampleNotes", 7, 1, 20 };

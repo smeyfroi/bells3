@@ -15,4 +15,5 @@ namespace Constants {
   static const size_t SOM_WIDTH = 256;
   static const size_t SOM_HEIGHT = 256;
 
+  static const int CIRCLE_RESOLUTION = 64;
 };
