@@ -3,6 +3,16 @@
 #include "dkm.hpp"
 
 //--------------------------------------------------------------
+void ofApp::setupSom() {
+  double minInstance[3] = { 0.0, 0.0, 0.0 };
+  double maxInstance[3] = { 1.0, 1.0, 1.0 };
+  som.setFeaturesRange(3, minInstance, maxInstance);
+  som.setMapSize(Constants::SOM_WIDTH, Constants::SOM_HEIGHT); // can go to 3 dimensions
+  som.setInitialLearningRate(0.1);
+  som.setNumIterations(3000);
+  som.setup();
+}
+
 void ofApp::setup(){
   ofSetVerticalSync(false);
   ofEnableAlphaBlending();
@@ -11,13 +21,7 @@ void ofApp::setup(){
   ofSetFrameRate(Constants::FRAME_RATE);
   TIME_SAMPLE_SET_FRAMERATE(Constants::FRAME_RATE);
 
-  double minInstance[3] = { 0.0, 0.0, 0.0 };
-  double maxInstance[3] = { 1.0, 1.0, 1.0 };
-  som.setFeaturesRange(3, minInstance, maxInstance);
-  som.setMapSize(Constants::SOM_WIDTH, Constants::SOM_HEIGHT); // can go to 3 dimensions
-  som.setInitialLearningRate(0.1);
-  som.setNumIterations(3000);
-  som.setup();
+  setupSom();
   
   fluidSimulation.setup({ Constants::FLUID_WIDTH, Constants::FLUID_HEIGHT });
   
@@ -88,8 +92,10 @@ void ofApp::updateRecentNotes(float s, float t, float u, float v) {
 }
 
 void ofApp::updateClusters() {
+  if (recentNoteXYs.size() <= clusterCentresParameter) return;
+
   TS_START("update-kmeans");
-  if (recentNoteXYs.size() > clusterCentresParameter) {
+  {
     dkm::clustering_parameters<float> params { static_cast<uint32_t>(clusterCentresParameter) };
     params.set_random_seed(1000); // keep clusters stable
     clusterResults = dkm::kmeans_lloyd(recentNoteXYs, params);
@@ -138,6 +144,13 @@ void ofApp::decayClusters() {
   TS_STOP("decay-clusters");
 }
 
+void ofApp::updateSom(float x, float y, float z) {
+  TS_START("update-som");
+  double instance[3] = { static_cast<double>(x), static_cast<double>(y), static_cast<double>(z) };
+  som.updateMap(instance);
+  TS_STOP("update-som");
+}
+
 void ofApp::update() {
   introspector.update();
 
@@ -179,14 +192,8 @@ void ofApp::update() {
     updateRecentNotes(s, t, u, v);
     updateClusters();
     decayClusters();
-    
-    TS_START("update-som");
-    {
-      double instance[3] = { static_cast<double>(s), static_cast<double>(t), static_cast<double>(v) };
-      som.updateMap(instance);
-    }
-    TS_STOP("update-som");
 
+    updateSom(s, t, v);
     ofFloatColor somColor = somColorAt(s, t);
     ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.25); darkSomColor.setSaturation(1.0);
 
@@ -370,11 +377,13 @@ void ofApp::update() {
       fluidSimulation.getFlowValuesFbo().getSource().begin();
       {
         ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-        ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 0.3));
         ofPushMatrix();
         ofScale(Constants::FLUID_WIDTH);
         const float lineWidth = 0.5 * 1.0 / Constants::FLUID_WIDTH;
+        ofColor color = ofFloatColor(1.0, 1.0, 1.0, 0.1);
+        ofSetColor(color);
         dividedArea.draw(0.0, lineWidth, 0.0);
+//        dividedArea.draw({}, {0.0, lineWidth, color}, {});
         ofPopMatrix();
       }
       fluidSimulation.getFlowValuesFbo().getSource().end();
@@ -390,11 +399,12 @@ void ofApp::update() {
   // draw divisions on foreground
   {
     divisionsFbo.begin();
-    ofSetColor(ofFloatColor(0.0, 0.0, 0.0, 1.0));
     ofPushMatrix();
     ofScale(divisionsFbo.getWidth(), divisionsFbo.getHeight());
-    const float lineWidth = 100.0 * 1.0 / divisionsFbo.getWidth();
-    dividedArea.draw(0.0, lineWidth, 0.0);
+    const float maxLineWidth = 120.0 * 1.0 / divisionsFbo.getWidth();
+    const float minLineWidth = 40.0 * 1.0 / divisionsFbo.getWidth();
+    const ofFloatColor color { 0.0, 0.0, 0.0, 1.0 };
+    dividedArea.draw({}, { minLineWidth, maxLineWidth, color }, {});
     ofPopMatrix();
     divisionsFbo.end();
   }

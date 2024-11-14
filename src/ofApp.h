@@ -36,9 +36,12 @@ public:
   
 private:
 
+  void setupSom();
+
   void updateRecentNotes(float s, float t, float u, float v);
   void updateClusters();
   void decayClusters();
+  void updateSom(float x, float y, float z);
 
   // bells
 //    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
