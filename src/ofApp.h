@@ -7,6 +7,7 @@
 #include "ofxAudioData.h"
 #include "FluidSimulation.h"
 #include "MaskShader.h"
+#include "MultiplyColorShader.h"
 #include "ofxIntrospector.h"
 #include "Constants.h"
 #include "ofxDividedArea.h"
@@ -44,9 +45,9 @@ private:
   void updateSom(float x, float y, float z);
 
   // bells
-//    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
-//      std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav",
-//                                                           "Jam-20240517-155805463/____-80_41_155_x_22141.oscs") };
+    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
+      std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav",
+                                                           "Jam-20240517-155805463/____-80_41_155_x_22141.oscs") };
 
   // nightsong
 //    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
@@ -54,9 +55,9 @@ private:
 //                                                           "Jam-20240402-094851837/____-46_137_90_x_22141.oscs") };
 
   // treganna
-  std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
-    std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav",
-                                                         "Jam-20240719-093508910/____-92_9_186_x_22141.oscs") };
+//  std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
+//    std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav",
+//                                                         "Jam-20240719-093508910/____-92_9_186_x_22141.oscs") };
 
   std::shared_ptr<ofxAudioData::Processor> audioDataProcessorPtr { std::make_shared<ofxAudioData::Processor>(audioAnalysisClientPtr) };
   std::shared_ptr<ofxAudioData::Plots> audioDataPlotsPtr { std::make_shared<ofxAudioData::Plots>(audioDataProcessorPtr) };
@@ -64,17 +65,19 @@ private:
   
   ofxSelfOrganizingMap som;
   ofFloatColor somColorAt(float x, float y) const;
-  
+
+  MultiplyColorShader fadeShader;
+
   FluidSimulation fluidSimulation;
   ofTexture frozenFluid;
 
-  ofFbo foregroundFbo; // transient lines and circles
+  PingPongFbo foregroundFbo; // transient lines and circles
   
-  ofFbo crystalFbo;
+  PingPongFbo crystalFbo;
   ofFbo crystalMaskFbo;
   MaskShader maskShader;
   
-  ofFbo divisionsFbo;
+  PingPongFbo divisionsFbo;
   DividedArea dividedArea { {1.0, 1.0}, 7 };
 
   std::vector<std::array<float, 2>> recentNoteXYs;
@@ -109,9 +112,9 @@ private:
   ofParameter<int> sampleNotesParameter { "sampleNotes", 7, 1, 20 };
 
   ofParameterGroup fadeParameters { "fade" };
-  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.01, 0.001, 0.1 };
-  ofParameter<float> fadeDivisionsParameter { "fadeDivisions", 0.06, 0.001, 0.1 };
-  ofParameter<float> fadeForegroundParameter { "fadeForeground", 0.005, 0.001, 0.1 };
+  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.99, 0.9, 1.0 };
+  ofParameter<float> fadeDivisionsParameter { "fadeDivisions", 0.94, 0.9, 1.0 };
+  ofParameter<float> fadeForegroundParameter { "fadeForeground", 0.99, 0.9, 1.0 };
   
   ofParameterGroup impulseParameters { "impulse" };
   ofParameter<float> impulseRadiusParameter { "impulseRadius", 0.085, 0.01, 0.2 };
