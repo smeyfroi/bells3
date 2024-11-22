@@ -8,11 +8,12 @@
 #include "FluidSimulation.h"
 #include "MaskShader.h"
 #include "MultiplyColorShader.h"
+#include "TranslateShader.h"
 #include "ofxIntrospector.h"
 #include "Constants.h"
 #include "ofxDividedArea.h"
 
-using DkmClusterResults = std::tuple<std::vector<std::array<float, 2>>, std::vector<uint32_t>>;
+using DkmClusterResults = std::tuple<std::vector<std::array<float, 2>>, std::vector<uint32_t>>; // (x,y),id
 
 class ofApp : public ofBaseApp{
   
@@ -49,14 +50,14 @@ private:
   void drawFluidClusterMarks(float x, float y, ofFloatColor color);
 
   // bells
-    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
-      std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav",
-                                                           "Jam-20240517-155805463/____-80_41_155_x_22141.oscs") };
+//    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
+//      std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav",
+//                                                           "Jam-20240517-155805463/____-80_41_155_x_22141.oscs") };
 
   // nightsong
-//    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
-//      std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav",
-//                                                           "Jam-20240402-094851837/____-46_137_90_x_22141.oscs") };
+    std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
+      std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav",
+                                                           "Jam-20240402-094851837/____-46_137_90_x_22141.oscs") };
 
   // treganna
 //  std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
@@ -71,6 +72,7 @@ private:
   ofFloatColor somColorAt(float x, float y) const;
 
   MultiplyColorShader fadeShader;
+  TranslateShader translateShader;
 
   FluidSimulation fluidSimulation;
   ofTexture frozenFluid;
@@ -82,7 +84,7 @@ private:
   MaskShader maskShader;
   
   PingPongFbo divisionsFbo;
-  DividedArea dividedArea { {1.0, 1.0}, 7 };
+  DividedArea dividedArea { {1.0, 1.0}, 5 };
 
   std::vector<std::array<float, 2>> recentNoteXYs;
   DkmClusterResults clusterResults;
@@ -108,21 +110,22 @@ private:
   ofParameter<float> maxSpectralCentroidParameter { "maxCentroidKurtosis", 6.0, 0.0, 10.0 };
 
   ofParameterGroup clusterParameters { "cluster" };
-  ofParameter<int> clusterCentresParameter { "clusterCentres", 12, 2.0, 50.0 };
+  ofParameter<int> clusterCentresParameter { "clusterCentres", 15, 2.0, 50.0 };
   ofParameter<int> clusterSourceSamplesMaxParameter { "clusterSourceSamplesMax", 3000, 1000, 8000 }; // Note: 1600 raw samples per frame at 30fps
   ofParameter<float> clusterDecayRateParameter { "clusterDecayRate", 0.94, 0.0, 1.0 };
-  ofParameter<float> sameClusterToleranceParameter { "sameClusterTolerance", 0.1, 0.01, 1.0 };
-  ofParameter<int> sampleNoteClustersParameter { "sampleNoteClusters", 7, 1, 20 };
-  ofParameter<int> sampleNotesParameter { "sampleNotes", 7, 1, 20 };
+  ofParameter<float> sameClusterToleranceParameter { "sameClusterTolerance", 0.15, 0.01, 1.0 };
+
+  ofParameterGroup crystalParameters { "crystal" };
+  ofParameter<int> sampleNotesParameter { "sampleNotes", 20, 5, 50 };
 
   ofParameterGroup fadeParameters { "fade" };
-  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.99, 0.9, 1.0 };
+  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.992, 0.9, 1.0 };
   ofParameter<float> fadeDivisionsParameter { "fadeDivisions", 0.94, 0.9, 1.0 };
   ofParameter<float> fadeForegroundParameter { "fadeForeground", 0.99, 0.9, 1.0 };
   
   ofParameterGroup impulseParameters { "impulse" };
   ofParameter<float> impulseRadiusParameter { "impulseRadius", 0.085, 0.01, 0.2 };
-  ofParameter<float> impulseRadialVelocityParameter { "impulseRadialVelocity", 0.0003, 0.0001, 0.001 };
+  ofParameter<float> impulseRadialVelocityParameter { "impulseRadialVelocity", 0.0004, 0.0001, 0.001 };
 
   // draw extended outlines in the foreground (saving them for redrawing into fluid)
   //  float width = 15 * 1.0 / foregroundLinesFbo.getWidth();
