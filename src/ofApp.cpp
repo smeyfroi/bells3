@@ -153,6 +153,22 @@ void ofApp::updateSom(float x, float y, float z) {
   TS_STOP("update-som");
 }
 
+void ofApp::drawForegroundNoteMark(float x, float y, ofFloatColor color) {
+  foregroundFbo.getSource().begin();
+  ofEnableBlendMode(OF_BLENDMODE_DISABLED);
+  ofSetColor(color);
+  ofDrawCircle(x*foregroundFbo.getWidth(), y*foregroundFbo.getHeight(), 10.0);
+  foregroundFbo.getSource().end();
+}
+
+void ofApp::drawFluidNoteMark(float x, float y, ofFloatColor color) {
+  fluidSimulation.getFlowValuesFbo().getSource().begin();
+  ofEnableBlendMode(OF_BLENDMODE_DISABLED);
+  ofSetColor(color);
+  ofDrawCircle(x*Constants::FLUID_WIDTH, y*Constants::FLUID_HEIGHT, 3.0);
+  fluidSimulation.getFlowValuesFbo().getSource().end();
+}
+
 void ofApp::update() {
   introspector.update();
 
@@ -166,11 +182,6 @@ void ofApp::update() {
 
   // fade foreground
   fadeShader.render(foregroundFbo, glm::vec4(1.0, 1.0, 1.0, fadeForegroundParameter));
-
-  float s = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::pitch, minPitchParameter, maxPitchParameter);// 700.0, 1300.0);
-  float t = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::rootMeanSquare, minRMSParameter, maxRMSParameter); //400.0, 4000.0, false);
-  float u = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralKurtosis, minSpectralKurtosisParameter, maxSpectralKurtosisParameter);
-  float v = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralCentroid, minSpectralCentroidParameter, maxSpectralCentroidParameter);
   
   std::vector<ofxAudioData::ValiditySpec> sampleValiditySpecs {
     {ofxAudioAnalysisClient::AnalysisScalar::rootMeanSquare, false, validLowerRmsParameter},
@@ -179,6 +190,14 @@ void ofApp::update() {
   };
 
   if (audioDataProcessorPtr->isDataValid(sampleValiditySpecs)) {
+
+    // fetch scalars from current note
+    float s = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::pitch, minPitchParameter, maxPitchParameter);// 700.0, 1300.0);
+    float t = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::rootMeanSquare, minRMSParameter, maxRMSParameter); //400.0, 4000.0, false);
+    float u = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralKurtosis, minSpectralKurtosisParameter, maxSpectralKurtosisParameter);
+    float v = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralCentroid, minSpectralCentroidParameter, maxSpectralCentroidParameter);
+
+    // update recent notes and clusters
     updateRecentNotes(s, t, u, v);
     updateClusters();
     decayClusters();
@@ -187,24 +206,61 @@ void ofApp::update() {
     ofFloatColor somColor = somColorAt(s, t);
     ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.25); darkSomColor.setSaturation(1.0);
 
-    // Draw foreground mark for raw audio data sample in darkened SOM color
+    drawForegroundNoteMark(s, t, darkSomColor);
+    drawFluidNoteMark(s, t, somColor);
+    
+    // draw arcs around longer-lasting clusterCentres into foreground
     {
       foregroundFbo.getSource().begin();
-      ofEnableBlendMode(OF_BLENDMODE_DISABLED);
-      ofSetColor(darkSomColor);
-      ofDrawCircle(s*foregroundFbo.getWidth(), t*foregroundFbo.getHeight(), 10.0);
+      ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+      ofNoFill();
+      for (auto& p: clusterCentres) {
+        if (p.w < 4.0) continue;
+        ofFloatColor somColor = somColorAt(p.x, p.y);
+        ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.7); darkSomColor.setSaturation(1.0);
+        darkSomColor.a = 0.7;
+        ofSetColor(darkSomColor);
+        ofPolyline path;
+        float radius = std::fmod(p.w*5.0, 480);
+        path.arc(p.x*foregroundFbo.getWidth(), p.y*foregroundFbo.getHeight(), radius, radius, -180.0*(u+p.x), 180.0*(v+p.y), Constants::CIRCLE_RESOLUTION);
+        path.draw();
+      }
       foregroundFbo.getSource().end();
     }
-
-    // Draw fluid mark for raw audio data sample in darkened SOM color
-    {
-      fluidSimulation.getFlowValuesFbo().getSource().begin();
-      ofEnableBlendMode(OF_BLENDMODE_DISABLED);
-      ofSetColor(darkSomColor);
-      ofDrawCircle(s*Constants::FLUID_WIDTH, t*Constants::FLUID_HEIGHT, 3.0);
-      fluidSimulation.getFlowValuesFbo().getSource().end();
-    }
     
+    // draw circles around longer-lasting clusterCentres into fluid layer
+    fluidSimulation.getFlowValuesFbo().getSource().begin();
+    ofEnableBlendMode(OF_BLENDMODE_ADD);
+    ofNoFill();
+    ofSetColor(ofFloatColor(0.1, 0.1, 0.1, 0.6));
+    for (auto& p: clusterCentres) {
+      if (p.w < 5.0) continue;
+      ofDrawCircle(p.x * Constants::FLUID_WIDTH, p.y * Constants::FLUID_HEIGHT, u * 100.0);
+    }
+    fluidSimulation.getFlowValuesFbo().getSource().end();
+    
+    {
+      TS_START("update-fluid-clusters");
+  //    auto& clusterCentres = std::get<0>(clusterResults);
+      for (auto& centre : clusterCentres) {
+        float x = centre[0]; float y = centre[1];
+        const float COL_FACTOR = 0.008;
+        ofFloatColor color = somColorAt(x, y) * COL_FACTOR;
+        color.a = 0.005 * ofRandom(1.0);
+        FluidSimulation::Impulse impulse {
+          { x * Constants::FLUID_WIDTH, y * Constants::FLUID_HEIGHT },
+          Constants::FLUID_WIDTH * impulseRadiusParameter,
+          { 0.0, 0.0 }, // velocity
+          impulseRadialVelocityParameter,
+          color,
+          1.0 // temperature
+        };
+        fluidSimulation.applyImpulse(impulse);
+      }
+      fluidSimulation.update();
+      TS_STOP("update-fluid-clusters");
+    }
+
     // Make fine structure from some recent notes
     const std::vector<uint32_t>& recentNoteXYIds = std::get<1>(clusterResults);
     if (recentNoteXYs.size() > 70) {
@@ -352,17 +408,6 @@ void ofApp::update() {
       }
     }
 
-    // draw circles around longer-lasting clusterCentres into fluid layer
-    fluidSimulation.getFlowValuesFbo().getSource().begin();
-    ofEnableBlendMode(OF_BLENDMODE_ADD);
-    ofNoFill();
-    ofSetColor(ofFloatColor(0.1, 0.1, 0.1, 0.6));
-    for (auto& p: clusterCentres) {
-      if (p.w < 5.0) continue;
-      ofDrawCircle(p.x * Constants::FLUID_WIDTH, p.y * Constants::FLUID_HEIGHT, u * 100.0);
-    }
-    fluidSimulation.getFlowValuesFbo().getSource().end();
-
     TS_START("update-divider");
     bool majorDividersChanged = dividedArea.updateUnconstrainedDividerLines(clusterCentres);
     if (majorDividersChanged) {
@@ -399,47 +444,6 @@ void ofApp::update() {
     dividedArea.draw({}, { minLineWidth, maxLineWidth, color }, {});
     ofPopMatrix();
     divisionsFbo.getSource().end();
-  }
-
-  // draw arcs around longer-lasting clusterCentres into foreground
-  {
-    foregroundFbo.getSource().begin();
-    ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-    ofNoFill();
-    for (auto& p: clusterCentres) {
-      if (p.w < 4.0) continue;
-      ofFloatColor somColor = somColorAt(p.x, p.y);
-      ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.7); darkSomColor.setSaturation(1.0);
-      darkSomColor.a = 0.7;
-      ofSetColor(darkSomColor);
-      ofPolyline path;
-      float radius = std::fmod(p.w*5.0, 480);
-      path.arc(p.x*foregroundFbo.getWidth(), p.y*foregroundFbo.getHeight(), radius, radius, -180.0*(u+p.x), 180.0*(v+p.y), Constants::CIRCLE_RESOLUTION);
-      path.draw();
-    }
-    foregroundFbo.getSource().end();
-  }
-  
-  {
-    TS_START("update-fluid-clusters");
-//    auto& clusterCentres = std::get<0>(clusterResults);
-    for (auto& centre : clusterCentres) {
-      float x = centre[0]; float y = centre[1];
-      const float COL_FACTOR = 0.008;
-      ofFloatColor color = somColorAt(x, y) * COL_FACTOR;
-      color.a = 0.005 * ofRandom(1.0);
-      FluidSimulation::Impulse impulse {
-        { x * Constants::FLUID_WIDTH, y * Constants::FLUID_HEIGHT },
-        Constants::FLUID_WIDTH * impulseRadiusParameter,
-        { 0.0, 0.0 }, // velocity
-        impulseRadialVelocityParameter,
-        color,
-        1.0 // temperature
-      };
-      fluidSimulation.applyImpulse(impulse);
-    }
-    fluidSimulation.update();
-    TS_STOP("update-fluid-clusters");
   }
 }
 

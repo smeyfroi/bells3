@@ -43,6 +43,10 @@ private:
   void updateClusters();
   void decayClusters();
   void updateSom(float x, float y, float z);
+  void drawForegroundNoteMark(float x, float y, ofFloatColor color);
+  void drawFluidNoteMark(float x, float y, ofFloatColor color);
+  void drawForegroundClusterMarks(float x, float y, ofFloatColor color);
+  void drawFluidClusterMarks(float x, float y, ofFloatColor color);
 
   // bells
     std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr {
