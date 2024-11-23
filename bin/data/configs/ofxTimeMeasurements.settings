@@ -1,16 +1,1 @@
-update-divider-fetch-frozen=1|1|0
-update-divider=1|1|0
-update-fine-structure=1|1|0
-GL_update-fluid-simulation=1|1|0
-update-clusterCentres=1|1|0
-update-divider-draw-fluid=1|1|0
-update-fluid-clusters=1|1|0
-decay-clusters=1|1|0
-draw-introspection=1|1|0
-draw()=1|1|0
-update-draw-divisions=1|1|0
-update-som=1|1|0
-update-kmeans=1|1|0
-keyPressed()=1|1|0
-update-recent-notes=1|1|0
 update()=1|1|0

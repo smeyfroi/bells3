@@ -121,7 +121,7 @@ private:
   ofParameter<int> sampleNotesParameter { "sampleNotes", 20, 5, 50 };
 
   ofParameterGroup fadeParameters { "fade" };
-  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.995, 0.9, 1.0 };
+  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.998, 0.9, 1.0 };
   ofParameter<float> fadeDivisionsParameter { "fadeDivisions", 0.94, 0.9, 1.0 };
   ofParameter<float> fadeForegroundParameter { "fadeForeground", 0.99, 0.9, 1.0 };
   

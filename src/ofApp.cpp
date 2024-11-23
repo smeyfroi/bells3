@@ -4,6 +4,7 @@
 
 //--------------------------------------------------------------
 void ofApp::setupSom() {
+  ofSetRandomSeed(1000); // keep SOM stable
   double minInstance[3] = { 0.0, 0.0, 0.0 };
   double maxInstance[3] = { 1.0, 1.0, 1.0 };
   som.setFeaturesRange(3, minInstance, maxInstance);
@@ -349,7 +350,7 @@ void ofApp::update() {
             crystalMaskFbo.end();
             
             // find a proportional scale to some limit to fill the mask with a reduced view of part of the frozen fluid
-            constexpr float MAX_SCALE = 2.0;
+            constexpr float MAX_SCALE = 3.0;
             float scaleX = std::fminf(MAX_SCALE, 1.0 / pathBounds.width);
             float scaleY = std::fminf(MAX_SCALE, 1.0 / pathBounds.height);
             float scale = std::fminf(scaleX, scaleY);
@@ -358,7 +359,8 @@ void ofApp::update() {
             crystalFbo.getSource().begin();
             {
               ofEnableBlendMode(OF_BLENDMODE_ADD);
-              ofFloatColor fragmentColor = somColorAt(pathBounds.x, pathBounds.y)*0.7;
+              ofFloatColor fragmentColor = somColorAt(pathBounds.x, pathBounds.y)*0.4;
+              ofSetColor(fragmentColor);
               maskShader.render(frozenFluid, crystalMaskFbo,
                                 crystalFbo.getWidth(), crystalFbo.getHeight(),
                                 false,
@@ -439,7 +441,7 @@ void ofApp::draw() {
     // fluid
     {
       ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-      ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 0.8));
+      ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 0.7));
       fluidSimulation.getFlowValuesFbo().getSource().draw(0.0, 0.0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
     }
     
