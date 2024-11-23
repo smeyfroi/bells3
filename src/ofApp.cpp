@@ -25,7 +25,8 @@ void ofApp::setup(){
   
   fadeShader.load();
   translateShader.load();
-  
+  logisticFnShader.load();
+
   fluidSimulation.setup({ Constants::FLUID_WIDTH, Constants::FLUID_HEIGHT });
   
   divisionsFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_RGBA); // GL_RGBA32F); // 8 bit for ghosts of past lines
@@ -173,39 +174,42 @@ void ofApp::drawFluidNoteMark(float x, float y, ofFloatColor color) {
 
 void ofApp::update() {
   introspector.update();
-
+  
   audioDataProcessorPtr->update();
   
+  TSGL_START("update-fluid-simulation");
   fluidSimulation.update();
-
+  TSGL_STOP("update-fluid-simulation");
+  
   fadeShader.render(crystalFbo, {1.0, 1.0, 1.0, fadeCrystalsParameter});
+  //  logisticFnShader.render(crystalFbo, glm::vec4 { 0.0, 0.0, 0.0, 1.0 });
   fadeShader.render(divisionsFbo, {1.0, 1.0, 1.0, fadeDivisionsParameter});
   fadeShader.render(foregroundFbo, {1.0, 1.0, 1.0, fadeForegroundParameter});
-  translateShader.render(foregroundFbo, {0.000, 0.0002});
+  translateShader.render(foregroundFbo, {0.000, 0.0003});
   
   std::vector<ofxAudioData::ValiditySpec> sampleValiditySpecs {
     {ofxAudioAnalysisClient::AnalysisScalar::rootMeanSquare, false, validLowerRmsParameter},
     {ofxAudioAnalysisClient::AnalysisScalar::pitch, false, validLowerPitchParameter},
     {ofxAudioAnalysisClient::AnalysisScalar::pitch, true, validUpperPitchParameter}
   };
-
+  
   if (audioDataProcessorPtr->isDataValid(sampleValiditySpecs)) {
-
+    
     // fetch scalars from current note
     float s = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::pitch, minPitchParameter, maxPitchParameter);// 700.0, 1300.0);
     float t = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::rootMeanSquare, minRMSParameter, maxRMSParameter); //400.0, 4000.0, false);
     float u = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralKurtosis, minSpectralKurtosisParameter, maxSpectralKurtosisParameter);
     float v = audioDataProcessorPtr->getNormalisedScalarValue(ofxAudioAnalysisClient::AnalysisScalar::spectralCentroid, minSpectralCentroidParameter, maxSpectralCentroidParameter);
-
+    
     // update recent notes and clusters
     updateRecentNotes(s, t, u, v);
     updateClusters();
     decayClusters();
-
+    
     updateSom(s, t, v);
     ofFloatColor somColor = somColorAt(s, t);
     ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.25); darkSomColor.setSaturation(1.0);
-
+    
     drawForegroundNoteMark(s, t, darkSomColor);
     drawFluidNoteMark(s, t, somColor);
     
@@ -259,31 +263,34 @@ void ofApp::update() {
     }
     
     // Make fine structure based on frequent clusters
-    const std::vector<std::array<float, 2>>& clusteredNoteXYs = std::get<0>(clusterResults);
-    const std::vector<uint32_t>& clusteredNoteIds = std::get<1>(clusterResults);
-    if (recentNoteXYs.size() > 70) { // arbitrary threshold: "enough" samples to start this process
+    TS_START("update-fine-structure");
+    if (recentNoteXYs.size() > 50) { // arbitrary threshold: "enough" samples to start this process
+      const std::vector<uint32_t>& clusteredNoteIds = std::get<1>(clusterResults);
       
       // find a cluster to work with
       auto clusterId = *(clusteredNoteIds.end() - 1); // could be begin() but maybe this gets the most recent note to start from
       
       // find some noteIds from that cluster
       std::vector<uint32_t> sampledClusterNoteIds;
-      for(size_t i = clusteredNoteIds.size() - 1; i > clusteredNoteIds.size() - sampleNotesParameter; i--) {
+      for(uint32_t i = clusteredNoteIds.size() - 1; i > clusteredNoteIds.size() - sampleNotesParameter; i--) {
         auto id = clusteredNoteIds[i];
         if (id == clusterId) sampledClusterNoteIds.push_back(i);
       }
       
       // draw crystals if we have at least a triangle
       if (sampledClusterNoteIds.size() > 2) {
-
+        std::vector<glm::vec2> sampledClusterNoteXYs;
+        for (uint32_t id : sampledClusterNoteIds) {
+          sampledClusterNoteXYs.push_back({ recentNoteXYs[id][0], recentNoteXYs[id][1] });
+        }
+        
         // make normalised path from sampled notes
         ofPath path;
-        for (uint32_t id : sampledClusterNoteIds) {
-          const auto [x, y] = recentNoteXYs[id];
-          path.lineTo(x, y);
+        for (const auto p : sampledClusterNoteXYs) {
+          path.lineTo(p);
         }
         path.close();
-
+        
         // find normalised path bounds
         ofRectangle pathBounds;
         for (const auto& polyline : path.getOutline()) {
@@ -292,6 +299,25 @@ void ofApp::update() {
         
         // ignore for bounds too small
         if (pathBounds.width > 1.0/100) {
+          
+          // add constrained divider lines extending the path segments,
+          // and draw them into fluid layer
+          fluidSimulation.getFlowValuesFbo().getSource().begin();
+          {
+            ofPushMatrix();
+            ofScale(Constants::FLUID_WIDTH, Constants::FLUID_HEIGHT);
+            ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+            ofSetColor(ofFloatColor(0.0, 0.0, 0.0, 1.0));
+            float width = 6.0 * 1.0 / Constants::FLUID_WIDTH;
+            for (int i = 0; i != sampledClusterNoteXYs.size(); i++) {
+              if (auto dividerLine = dividedArea.addConstrainedDividerLine(sampledClusterNoteXYs[i],
+                                                                           sampledClusterNoteXYs[(i + 1) % sampledClusterNoteXYs.size()])) {
+                dividerLine.value().draw(width);
+              }
+            };
+            ofPopMatrix();
+          }
+          fluidSimulation.getFlowValuesFbo().getSource().end();
           
           // paint flat filled path into the fluid layer
           fluidSimulation.getFlowValuesFbo().getSource().begin();
@@ -332,75 +358,24 @@ void ofApp::update() {
             crystalFbo.getSource().begin();
             {
               ofEnableBlendMode(OF_BLENDMODE_ADD);
-              ofFloatColor fragmentColor = somColorAt(pathBounds.x, pathBounds.y)*0.7;// fragmentColor.a = 0.3;
-              maskShader.render(frozenFluid, crystalMaskFbo, crystalFbo.getWidth(), crystalFbo.getHeight(), false, {pathBounds.x+pathBounds.width/2.0, pathBounds.y+pathBounds.height/2.0}, {scale, scale});
+              ofFloatColor fragmentColor = somColorAt(pathBounds.x, pathBounds.y)*0.7;
+              maskShader.render(frozenFluid, crystalMaskFbo,
+                                crystalFbo.getWidth(), crystalFbo.getHeight(),
+                                false,
+                                {pathBounds.x+pathBounds.width/2.0, pathBounds.y+pathBounds.height/2.0},
+                                {scale, scale});
             }
             crystalFbo.getSource().end();
           }
         }
-          
-//          // draw extended outlines in the foreground (saving them for redrawing into fluid)
-//          std::vector<DividerLine> extendedLines;
-//          float width = 8 * 1.0 / divisionsFbo.getWidth();
-//          divisionsFbo.getSource().begin();
-//          ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-//          ofSetColor(ofColor::black);
-//          ofPushMatrix();
-//          ofScale(foregroundFbo.getWidth(), foregroundFbo.getHeight());
-//          {
-//            for(auto iter = sameClusterNoteIds.begin(); iter < sameClusterNoteIds.end(); iter++) {
-//              auto id1 = *iter;
-//              const auto& note1 = recentNoteXYs[id1];
-//              float x1 = note1[0]; float y1 = note1[1];
-//              uint32_t id2;
-//              if (iter == sameClusterNoteIds.end() - 1) {
-//                id2 = *sameClusterNoteIds.begin();
-//              } else {
-//                id2 = *(iter + 1);
-//              }
-//              const auto& note2 = recentNoteXYs[id2];
-//              float x2 = note2[0]; float y2 = note2[1];
-//              if (note1 == note2) continue;
-//              DividerLine line = dividedArea.createConstrainedDividerLine({x1, y1}, {x2, y2});
-//              extendedLines.push_back(line);
-//              glm::vec2 p1 = line.start; glm::vec2 p2 = line.end;
-//              ofPushMatrix();
-//              ofTranslate(p1.x, p1.y);
-//              ofRotateRad(std::atan2((p2.y-p1.y), (p2.x-p1.x)));
-//              ofDrawRectangle(0.0, -width/2.0, ofDist(p1.x, p1.y, p2.x, p2.y), width);
-//              ofPopMatrix();
-//            }
-//          }
-//          ofPopMatrix();
-//          divisionsFbo.getSource().end();
-//          
-//          // redraw extended lines into the fluid layer
-//          fluidSimulation.getFlowValuesFbo().getSource().begin();
-//          ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-////          ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 0.7));
-//          ofSetColor(ofFloatColor(0.0, 0.0, 0.0, 0.3));
-//          ofPushMatrix();
-//          ofScale(Constants::FLUID_WIDTH, Constants::FLUID_HEIGHT);
-//          {
-//            float width = 1.0 * 1.0 / Constants::FLUID_WIDTH;
-//            for (const auto& line : extendedLines) {
-//              glm::vec2 p1 = line.start; glm::vec2 p2 = line.end;
-//              ofPushMatrix();
-//              ofTranslate(p1.x, p1.y);
-//              ofRotateRad(std::atan2((p2.y-p1.y), (p2.x-p1.x)));
-//              ofDrawRectangle(0.0, -width/2.0, ofDist(p1.x, p1.y, p2.x, p2.y), width);
-//              ofPopMatrix();
-//            }
-//          }
-//          ofPopMatrix();
-//          fluidSimulation.getFlowValuesFbo().getSource().end();
-//        }
       }
     }
-
+    TS_STOP("update-fine-structure");
+    
     TS_START("update-divider");
     bool majorDividersChanged = dividedArea.updateUnconstrainedDividerLines(clusterCentres);
     if (majorDividersChanged) {
+      TS_START("update-divider-draw-fluid");
       fluidSimulation.getFlowValuesFbo().getSource().begin();
       {
         ofEnableBlendMode(OF_BLENDMODE_ALPHA);
@@ -410,30 +385,42 @@ void ofApp::update() {
         ofColor color = ofFloatColor(1.0, 1.0, 1.0, 0.1);
         ofSetColor(color);
         dividedArea.draw(0.0, lineWidth, 0.0);
-//        dividedArea.draw({}, {0.0, lineWidth, color}, {});
         ofPopMatrix();
       }
       fluidSimulation.getFlowValuesFbo().getSource().end();
+      TS_STOP("update-divider-draw-fluid");
       
-      ofPixels frozenPixels;
-      fluidSimulation.getFlowValuesFbo().getSource().getTexture().readToPixels(frozenPixels);
-      frozenFluid.allocate(frozenPixels);
+      TS_START("update-divider-fetch-frozen");
+      // fetching pixels from gpu is slow
+      if (ofGetFrameNum() % 60 == 0.0) {
+        ofPixels frozenPixels;
+        fluidSimulation.getFlowValuesFbo().getSource().getTexture().readToPixels(frozenPixels);
+        frozenFluid.allocate(frozenPixels);
+      }
+      TS_STOP("update-divider-fetch-frozen");
     }
     TS_STOP("update-divider");
     
   } //isDataValid()
   
-  // draw divisions on foreground
+  // draw divisions on divisionsFbo
+  TS_START("update-draw-divisions");
   {
     divisionsFbo.getSource().begin();
     ofPushMatrix();
     ofScale(divisionsFbo.getWidth(), divisionsFbo.getHeight());
     const float maxLineWidth = 120.0 * 1.0 / divisionsFbo.getWidth();
     const float minLineWidth = 40.0 * 1.0 / divisionsFbo.getWidth();
-    const ofFloatColor color { 0.0, 0.0, 0.0, 1.0 };
-    dividedArea.draw({}, { minLineWidth, maxLineWidth, color }, {});
+    const ofFloatColor majorDividerColor { 0.0, 0.0, 0.0, 1.0 };
+    const ofFloatColor minorDividerColor { 0.0, 0.0, 0.0, 1.0 };
+    dividedArea.draw({}, { minLineWidth, maxLineWidth, majorDividerColor }, { minLineWidth/5.0f, minLineWidth/5.0f, minorDividerColor });
     ofPopMatrix();
     divisionsFbo.getSource().end();
+  }
+  TS_STOP("update-draw-divisions");
+  
+  if (dividedArea.constrainedDividerLines.size() > 1000) {
+    dividedArea.deleteEarlyConstrainedDividerLines(50);
   }
 }
 
@@ -463,18 +450,18 @@ void ofApp::draw() {
       foregroundFbo.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
     }
     
-    // divisions
-    {
-      ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-      ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
-      divisionsFbo.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
-    }
-    
     // crystals
     {
       ofEnableBlendMode(OF_BLENDMODE_ALPHA);
       ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
       crystalFbo.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
+    }
+    
+    // divisions
+    {
+      ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+      ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
+      divisionsFbo.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
     }
 
     ofPopStyle();

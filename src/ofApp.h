@@ -9,6 +9,7 @@
 #include "MaskShader.h"
 #include "MultiplyColorShader.h"
 #include "TranslateShader.h"
+#include "LogisticFnShader.h"
 #include "ofxIntrospector.h"
 #include "Constants.h"
 #include "ofxDividedArea.h"
@@ -73,6 +74,7 @@ private:
 
   MultiplyColorShader fadeShader;
   TranslateShader translateShader;
+  LogisticFnShader logisticFnShader;
 
   FluidSimulation fluidSimulation;
   ofTexture frozenFluid;
@@ -97,7 +99,7 @@ private:
   ofParameterGroup parameters;
   
   ofParameterGroup audioParameters { "audio" };
-  ofParameter<float> validLowerRmsParameter { "validLowerRms", 300.0, 100.0, 5000.0 };
+  ofParameter<float> validLowerRmsParameter { "validLowerRms", 250.0, 100.0, 5000.0 };
   ofParameter<float> validLowerPitchParameter { "validLowerPitch", 50.0, 50.0, 8000.0 };
   ofParameter<float> validUpperPitchParameter { "validUpperPitch", 5000.0, 50.0, 8000.0 };
   ofParameter<float> minPitchParameter { "minPitch", 200.0, 0.0, 8000.0 };
@@ -119,7 +121,7 @@ private:
   ofParameter<int> sampleNotesParameter { "sampleNotes", 20, 5, 50 };
 
   ofParameterGroup fadeParameters { "fade" };
-  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.992, 0.9, 1.0 };
+  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.995, 0.9, 1.0 };
   ofParameter<float> fadeDivisionsParameter { "fadeDivisions", 0.94, 0.9, 1.0 };
   ofParameter<float> fadeForegroundParameter { "fadeForeground", 0.99, 0.9, 1.0 };
   
