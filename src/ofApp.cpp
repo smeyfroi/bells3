@@ -22,6 +22,17 @@ void ofApp::setup(){
   ofSetFrameRate(Constants::FRAME_RATE);
   TIME_SAMPLE_SET_FRAMERATE(Constants::FRAME_RATE);
 
+  // nightsong
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
+  // bells
+  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
+  // treganna
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav", "Jam-20240719-093508910/____-92_9_186_x_22141.oscs");
+  
+  audioDataProcessorPtr = std::make_shared<ofxAudioData::Processor>(audioAnalysisClientPtr);
+  audioDataPlotsPtr = std::make_shared<ofxAudioData::Plots>(audioDataProcessorPtr);
+  audioDataSpectrumPlotsPtr = std::make_shared<ofxAudioData::SpectrumPlots>(audioDataProcessorPtr);
+  
   setupSom();
   
   fadeShader.load();
@@ -41,6 +52,8 @@ void ofApp::setup(){
   crystalMaskFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_R8);
   maskShader.load();
   
+  compositeFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_RGB);
+
   audioParameters.add(validLowerRmsParameter);
   audioParameters.add(validLowerPitchParameter);
   audioParameters.add(validUpperPitchParameter);
@@ -73,11 +86,11 @@ void ofApp::setup(){
   parameters.add(impulseParameters);
 
   auto fluidParameterGroup = fluidSimulation.getParameterGroup();
-  fluidParameterGroup.getFloat("dt").set(0.02);
-  fluidParameterGroup.getFloat("vorticity").set(15.0);
-  fluidParameterGroup.getFloat("value:dissipation").set(0.9985);
-  fluidParameterGroup.getFloat("velocity:dissipation").set(0.9999);
-  fluidParameterGroup.getInt("pressure:iterations").set(22);
+  fluidParameterGroup.getFloat("dt").set(0.025);
+  fluidParameterGroup.getFloat("vorticity").set(20.0);
+  fluidParameterGroup.getFloat("value:dissipation").set(0.999);
+  fluidParameterGroup.getFloat("velocity:dissipation").set(0.99999);
+  fluidParameterGroup.getInt("pressure:iterations").set(20);
   parameters.add(fluidParameterGroup);
   
   gui.setup(parameters);
@@ -209,7 +222,7 @@ void ofApp::update() {
     
     updateSom(s, t, v);
     ofFloatColor somColor = somColorAt(s, t);
-    ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.25); darkSomColor.setSaturation(1.0);
+    ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.3); darkSomColor.setSaturation(1.0);
     
     drawForegroundNoteMark(s, t, darkSomColor);
     drawFluidNoteMark(s, t, somColor);
@@ -309,7 +322,7 @@ void ofApp::update() {
             ofScale(Constants::FLUID_WIDTH, Constants::FLUID_HEIGHT);
             ofEnableBlendMode(OF_BLENDMODE_ALPHA);
             ofSetColor(ofFloatColor(0.0, 0.0, 0.0, 1.0));
-            float width = 6.0 * 1.0 / Constants::FLUID_WIDTH;
+            float width = 4.0 * 1.0 / Constants::FLUID_WIDTH;
             for (int i = 0; i != sampledClusterNoteXYs.size(); i++) {
               if (auto dividerLine = dividedArea.addConstrainedDividerLine(sampledClusterNoteXYs[i],
                                                                            sampledClusterNoteXYs[(i + 1) % sampledClusterNoteXYs.size()])) {
@@ -383,8 +396,8 @@ void ofApp::update() {
         ofEnableBlendMode(OF_BLENDMODE_ALPHA);
         ofPushMatrix();
         ofScale(Constants::FLUID_WIDTH);
-        const float lineWidth = 0.5 * 1.0 / Constants::FLUID_WIDTH;
-        ofColor color = ofFloatColor(1.0, 1.0, 1.0, 0.1);
+        const float lineWidth = 2.0 * 1.0 / Constants::FLUID_WIDTH;
+        ofColor color = ofFloatColor(1.0, 1.0, 1.0, 0.25);
         ofSetColor(color);
         dividedArea.draw(0.0, lineWidth, 0.0);
         ofPopMatrix();
@@ -411,11 +424,11 @@ void ofApp::update() {
     divisionsFbo.getSource().begin();
     ofPushMatrix();
     ofScale(divisionsFbo.getWidth(), divisionsFbo.getHeight());
-    const float maxLineWidth = 120.0 * 1.0 / divisionsFbo.getWidth();
-    const float minLineWidth = 40.0 * 1.0 / divisionsFbo.getWidth();
+    const float maxLineWidth = 160.0 * 1.0 / divisionsFbo.getWidth();
+    const float minLineWidth = 60.0 * 1.0 / divisionsFbo.getWidth();
     const ofFloatColor majorDividerColor { 0.0, 0.0, 0.0, 1.0 };
     const ofFloatColor minorDividerColor { 0.0, 0.0, 0.0, 1.0 };
-    dividedArea.draw({}, { minLineWidth, maxLineWidth, majorDividerColor }, { minLineWidth/5.0f, minLineWidth/5.0f, minorDividerColor });
+    dividedArea.draw({}, { minLineWidth, maxLineWidth, majorDividerColor }, { minLineWidth/4.0f, minLineWidth/4.0f, minorDividerColor });
     ofPopMatrix();
     divisionsFbo.getSource().end();
   }
@@ -432,42 +445,44 @@ ofFloatColor ofApp::somColorAt(float x, float y) const {
 }
 
 //--------------------------------------------------------------
-void ofApp::draw() {
+ofFbo ofApp::drawComposite() {
+  compositeFbo.begin();
+  ofClear(0, 255);
+  
+  // fluid
   {
-    ofPushStyle();
-    
-    ofClear(0, 255);
-    
-    // fluid
-    {
-      ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-      ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 0.7));
-      fluidSimulation.getFlowValuesFbo().getSource().draw(0.0, 0.0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
-    }
-    
-    // foreground
-    {
-      ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-      ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
-      foregroundFbo.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
-    }
-    
-    // crystals
-    {
-      ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-      ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
-      crystalFbo.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
-    }
-    
-    // divisions
-    {
-      ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-      ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
-      divisionsFbo.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
-    }
-
-    ofPopStyle();
+    ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+    ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 0.7));
+    fluidSimulation.getFlowValuesFbo().getSource().draw(0.0, 0.0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
   }
+  
+  // foreground
+  {
+    ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+    ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
+    foregroundFbo.draw(0, 0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
+  }
+  
+  // crystals
+  {
+    ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+    ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
+    crystalFbo.draw(0, 0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
+  }
+  
+  // divisions
+  {
+    ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+    ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
+    divisionsFbo.draw(0, 0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
+  }
+  
+  compositeFbo.end();
+  return compositeFbo;
+}
+
+void ofApp::draw() {
+  drawComposite().draw(0.0, 0.0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
   
   // introspection
   {
@@ -515,45 +530,9 @@ void ofApp::keyPressed(int key){
   }
   if (introspector.keyPressed(key)) return;
   if (key == 'S') {
-    ofFbo compositeFbo;
-    compositeFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_RGB);
-    compositeFbo.begin();
-    {
-      // blackground
-//      ofClear(0, 255);
-
-      // fluid
-      {
-        ofEnableBlendMode(OF_BLENDMODE_DISABLED);
-        ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
-        fluidSimulation.getFlowValuesFbo().getSource().draw(0.0, 0.0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
-      }
-      
-      // foreground
-      {
-        ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-        ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
-        foregroundFbo.draw(0, 0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
-      }
-      
-      // divisions
-      {
-        ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-        ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
-        divisionsFbo.draw(0, 0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
-      }
-      
-      // crystals
-      {
-        ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-        ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0));
-        crystalFbo.draw(0, 0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
-      }
-    }
-    compositeFbo.end();
     ofPixels pixels;
-    compositeFbo.readToPixels(pixels);
-    ofSaveImage(pixels, ofFilePath::getUserHomeDir()+"/Documents/bells2/snapshot-"+ofGetTimestampString()+".png", OF_IMAGE_QUALITY_BEST);
+    drawComposite().readToPixels(pixels);
+    ofSaveImage(pixels, ofFilePath::getUserHomeDir()+"/Documents/bells3/snapshot-"+ofGetTimestampString()+".png", OF_IMAGE_QUALITY_BEST);
   }
 }
 
