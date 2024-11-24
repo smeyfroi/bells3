@@ -101,7 +101,7 @@ private:
   ofParameter<float> maxSpectralCentroidParameter { "maxCentroidKurtosis", 6.0, 0.0, 10.0 };
 
   ofParameterGroup clusterParameters { "cluster" };
-  ofParameter<int> clusterCentresParameter { "clusterCentres", 25, 2, 60 };
+  ofParameter<int> clusterCentresParameter { "clusterCentres", 15, 2, 60 };
   ofParameter<int> clusterSourceSamplesMaxParameter { "clusterSourceSamplesMax", 4000, 1000, 8000 }; // Note: 1600 raw samples per frame at 30fps
   ofParameter<float> clusterDecayRateParameter { "clusterDecayRate", 0.98, 0.0, 1.0 };
   ofParameter<float> sameClusterToleranceParameter { "sameClusterTolerance", 0.2, 0.01, 1.0 };

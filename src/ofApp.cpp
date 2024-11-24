@@ -23,9 +23,9 @@ void ofApp::setup(){
   TIME_SAMPLE_SET_FRAMERATE(Constants::FRAME_RATE);
 
   // nightsong
-//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
+  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
   // bells
-  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
   // treganna
 //  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav", "Jam-20240719-093508910/____-92_9_186_x_22141.oscs");
   
@@ -86,10 +86,10 @@ void ofApp::setup(){
   parameters.add(impulseParameters);
 
   auto fluidParameterGroup = fluidSimulation.getParameterGroup();
-  fluidParameterGroup.getFloat("dt").set(0.025);
+  fluidParameterGroup.getFloat("dt").set(0.02);
   fluidParameterGroup.getFloat("vorticity").set(20.0);
   fluidParameterGroup.getFloat("value:dissipation").set(0.999);
-  fluidParameterGroup.getFloat("velocity:dissipation").set(0.99999);
+  fluidParameterGroup.getFloat("velocity:dissipation").set(0.9999);
   fluidParameterGroup.getInt("pressure:iterations").set(20);
   parameters.add(fluidParameterGroup);
   
@@ -107,6 +107,19 @@ void ofApp::updateRecentNotes(float s, float t, float u, float v) {
   }
   recentNoteXYs.push_back({ s, t });
   introspector.addCircle(s, t, 1.0/Constants::WINDOW_WIDTH*5.0, ofColor::yellow, true, 30); // introspection: small yellow circle for new raw source sample
+  fluidSimulation.getFlowValuesFbo().getSource().begin();
+  ofEnableBlendMode(OF_BLENDMODE_ADD);
+//  ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0) * 0.04);
+  float lastX = -1.0; float lastY = -1.0;
+  for (const auto [x, y] : recentNoteXYs) {
+    if (lastX > -1.0) {
+      ofFloatColor color = somColorAt(x, y); color.setBrightness(0.8); color.setSaturation(1.0);
+      ofSetColor(color * 0.001);
+      ofDrawLine(lastX, lastY, x, y);
+      lastX = x; lastY = y;
+    }
+  }
+  fluidSimulation.getFlowValuesFbo().getSource().end();
   TS_STOP("update-recent-notes");
 }
 
@@ -174,7 +187,7 @@ void ofApp::drawForegroundNoteMark(float x, float y, ofFloatColor color) {
   foregroundFbo.getSource().begin();
   ofEnableBlendMode(OF_BLENDMODE_DISABLED);
   ofSetColor(color);
-  ofDrawCircle(x*foregroundFbo.getWidth(), y*foregroundFbo.getHeight(), 10.0);
+  ofDrawCircle(x*foregroundFbo.getWidth(), y*foregroundFbo.getHeight(), 15.0);
   foregroundFbo.getSource().end();
 }
 
@@ -235,11 +248,10 @@ void ofApp::update() {
       for (auto& p: clusterCentres) {
         if (p.w < 4.0) continue;
         ofFloatColor somColor = somColorAt(p.x, p.y);
-        ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.7); darkSomColor.setSaturation(1.0);
-        darkSomColor.a = 0.7;
+        ofFloatColor darkSomColor = somColor; darkSomColor.setBrightness(0.6); darkSomColor.setSaturation(1.0); darkSomColor.a = 0.85;
         ofSetColor(darkSomColor);
         ofPolyline path;
-        float radius = std::fmod(p.w*5.0, 480);
+        float radius = std::fmod(p.w*5.0, 550);
         path.arc(p.x*foregroundFbo.getWidth(), p.y*foregroundFbo.getHeight(), radius, radius, -180.0*(u+p.x), 180.0*(v+p.y), Constants::CIRCLE_RESOLUTION);
         path.draw();
       }
@@ -250,7 +262,7 @@ void ofApp::update() {
     fluidSimulation.getFlowValuesFbo().getSource().begin();
     ofEnableBlendMode(OF_BLENDMODE_ADD);
     ofNoFill();
-    ofSetColor(ofFloatColor(0.1, 0.1, 0.1, 0.6));
+    ofSetColor(ofFloatColor(0.2, 0.2, 0.2, 0.6));
     for (auto& p: clusterCentres) {
       if (p.w < 5.0) continue;
       ofDrawCircle(p.x * Constants::FLUID_WIDTH, p.y * Constants::FLUID_HEIGHT, u * 100.0);
@@ -294,8 +306,14 @@ void ofApp::update() {
       // draw crystals if we have at least a triangle
       if (sampledClusterNoteIds.size() > 2) {
         std::vector<glm::vec2> sampledClusterNoteXYs;
+        glm::vec2 lastXY;
         for (uint32_t id : sampledClusterNoteIds) {
-          sampledClusterNoteXYs.push_back({ recentNoteXYs[id][0], recentNoteXYs[id][1] });
+          float x = recentNoteXYs[id][0];
+          float y = recentNoteXYs[id][1];
+          // exclude consecutive positions with same X or Y
+          glm::vec2 newXY = { x, y };
+          if (lastXY.x != x && lastXY.y != y) sampledClusterNoteXYs.push_back(newXY);
+          std::swap(lastXY, newXY);
         }
         
         // make normalised path from sampled notes
@@ -372,7 +390,7 @@ void ofApp::update() {
             crystalFbo.getSource().begin();
             {
               ofEnableBlendMode(OF_BLENDMODE_ADD);
-              ofFloatColor fragmentColor = somColorAt(pathBounds.x, pathBounds.y)*0.4;
+              ofFloatColor fragmentColor = somColorAt(pathBounds.x, pathBounds.y)*0.3;
               ofSetColor(fragmentColor);
               maskShader.render(frozenFluid, crystalMaskFbo,
                                 crystalFbo.getWidth(), crystalFbo.getHeight(),
@@ -428,13 +446,13 @@ void ofApp::update() {
     const float minLineWidth = 60.0 * 1.0 / divisionsFbo.getWidth();
     const ofFloatColor majorDividerColor { 0.0, 0.0, 0.0, 1.0 };
     const ofFloatColor minorDividerColor { 0.0, 0.0, 0.0, 1.0 };
-    dividedArea.draw({}, { minLineWidth, maxLineWidth, majorDividerColor }, { minLineWidth/4.0f, minLineWidth/4.0f, minorDividerColor });
+    dividedArea.draw({}, { minLineWidth, maxLineWidth, majorDividerColor }, { minLineWidth/6.0f, minLineWidth/6.0f, minorDividerColor });
     ofPopMatrix();
     divisionsFbo.getSource().end();
   }
   TS_STOP("update-draw-divisions");
   
-  if (dividedArea.constrainedDividerLines.size() > 1000) {
+  if (dividedArea.constrainedDividerLines.size() > 2000) {
     dividedArea.deleteEarlyConstrainedDividerLines(50);
   }
 }
@@ -452,7 +470,7 @@ ofFbo ofApp::drawComposite() {
   // fluid
   {
     ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-    ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 0.7));
+    ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 0.6));
     fluidSimulation.getFlowValuesFbo().getSource().draw(0.0, 0.0, Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT);
   }
   
