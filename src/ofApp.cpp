@@ -23,9 +23,9 @@ void ofApp::setup(){
   TIME_SAMPLE_SET_FRAMERATE(Constants::FRAME_RATE);
 
   // nightsong
-  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
   // bells
-//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
+  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
   // treganna
 //  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav", "Jam-20240719-093508910/____-92_9_186_x_22141.oscs");
   
@@ -446,7 +446,9 @@ void ofApp::update() {
     const float minLineWidth = 60.0 * 1.0 / divisionsFbo.getWidth();
     const ofFloatColor majorDividerColor { 0.0, 0.0, 0.0, 1.0 };
     const ofFloatColor minorDividerColor { 0.0, 0.0, 0.0, 1.0 };
-    dividedArea.draw({}, { minLineWidth, maxLineWidth, majorDividerColor }, { minLineWidth/6.0f, minLineWidth/6.0f, minorDividerColor });
+    dividedArea.draw({},
+                     { minLineWidth, maxLineWidth, majorDividerColor },
+                     { minLineWidth/6.0f, minLineWidth/2.0f, minorDividerColor, 5000.0*1.0/1000.0 });
     ofPopMatrix();
     divisionsFbo.getSource().end();
   }
