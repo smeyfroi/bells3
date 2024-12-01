@@ -98,6 +98,12 @@ void ofApp::setup(){
   parameters.add(fluidParameterGroup);
   
   gui.setup(parameters);
+  
+  recorder.setup(/*video*/true, /*audio*/false, glm::vec2(Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT), /*fps*/Constants::FRAME_RATE, /*bitrate*/10000);
+  recorder.setOverWrite(true);
+  std::filesystem::create_directory(ofToDataPath("Recordings"));
+  recorder.setFFmpegPathToAddonsPath();
+  recorder.setInputPixelFormat(OF_IMAGE_COLOR);
 
   ofxTimeMeasurements::instance()->setEnabled(false);
 }
@@ -481,12 +487,12 @@ void ofApp::update() {
     ofPushMatrix();
     ofScale(divisionsFbo.getWidth(), divisionsFbo.getHeight());
     const float maxLineWidth = 160.0 * 1.0 / divisionsFbo.getWidth();
-    const float minLineWidth = 60.0 * 1.0 / divisionsFbo.getWidth();
+    const float minLineWidth = 130.0 * 1.0 / divisionsFbo.getWidth();
     const ofFloatColor majorDividerColor { 0.0, 0.0, 0.0, 1.0 };
     const ofFloatColor minorDividerColor { 0.0, 0.0, 0.0, 1.0 };
     dividedArea.draw({},
                      { minLineWidth, maxLineWidth, majorDividerColor },
-                     { minLineWidth*0.7f, minLineWidth*0.9f, minorDividerColor, 0.7 });
+                     { minLineWidth*0.5f, minLineWidth*0.7f, minorDividerColor, 0.7 });
     ofPopMatrix();
     divisionsFbo.getSource().end();
   }
@@ -542,6 +548,14 @@ ofFbo ofApp::drawComposite() {
 void ofApp::draw() {
   drawComposite().draw(0.0, 0.0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
   
+  // video recording
+  if (recorder.isRecording()) {
+    ofPixels pixels;
+    compositeFbo.readToPixels(pixels);
+    pixels.resize(Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
+    recorder.addFrame(pixels);
+  }
+  
   if (somVisible) somImage.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
   
   // introspection
@@ -578,6 +592,15 @@ void ofApp::exit(){
 }
 
 //--------------------------------------------------------------
+void ofApp::startRecording() {
+  recorder.setOutputPath(ofToDataPath("Recordings/" + ofGetTimestampString() + ".mp4", true ));
+  recorder.startCustomRecord();
+}
+
+void ofApp::stopRecording() {
+  recorder.stop();
+}
+
 void ofApp::keyPressed(int key){
   if (audioAnalysisClientPtr->keyPressed(key)) return;
   if (key == OF_KEY_TAB) guiVisible = not guiVisible;
@@ -594,6 +617,13 @@ void ofApp::keyPressed(int key){
     ofPixels pixels;
     drawComposite().readToPixels(pixels);
     ofSaveImage(pixels, ofFilePath::getUserHomeDir()+"/Documents/bells3/snapshot-"+ofGetTimestampString()+".png", OF_IMAGE_QUALITY_BEST);
+  }
+  if (key == 'R') {
+    if (recorder.isRecording()) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
   }
 }
 

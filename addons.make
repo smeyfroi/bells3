@@ -4,6 +4,7 @@ ofxHistoryPlot
 ofxAudioAnalysisClient
 ofxAudioData
 ofxDividedArea
+ofxFFmpegRecorder
 ofxGui
 ofxIntrospector
 ofxRenderer

@@ -13,6 +13,7 @@
 #include "ofxIntrospector.h"
 #include "Constants.h"
 #include "ofxDividedArea.h"
+#include "ofxFFmpegRecorder.h"
 
 using DkmClusterResults = std::tuple<std::vector<std::array<float, 2>>, std::vector<uint32_t>>; // (x,y),id
 
@@ -52,6 +53,9 @@ private:
   void drawFluidClusterMarks(float x, float y, ofFloatColor color);
   ofFbo drawComposite();
 
+  void startRecording();
+  void stopRecording();
+    
   std::shared_ptr<ofxAudioAnalysisClient::FileClient> audioAnalysisClientPtr;
   std::shared_ptr<ofxAudioData::Processor> audioDataProcessorPtr;
   std::shared_ptr<ofxAudioData::Plots> audioDataPlotsPtr;
@@ -86,6 +90,8 @@ private:
 
   Introspector introspector; // add things to this in normalised coords
   
+  ofxFFmpegRecorder recorder;
+  
   bool guiVisible { false };
   ofxPanel gui;
   ofParameterGroup parameters;
@@ -104,17 +110,17 @@ private:
   ofParameter<float> maxSpectralCentroidParameter { "maxCentroidKurtosis", 6.0, 0.0, 10.0 };
 
   ofParameterGroup clusterParameters { "cluster" };
-  ofParameter<int> clusterCentresParameter { "clusterCentres", 15, 2, 60 };
-  ofParameter<int> clusterSourceSamplesMaxParameter { "clusterSourceSamplesMax", 4000, 1000, 8000 }; // Note: 1600 raw samples per frame at 30fps
+  ofParameter<int> clusterCentresParameter { "clusterCentres", 17, 2, 60 };
+  ofParameter<int> clusterSourceSamplesMaxParameter { "clusterSourceSamplesMax", 12000, 1000, 48000 }; // Note: 1600 raw samples per frame at 30fps
   ofParameter<float> clusterDecayRateParameter { "clusterDecayRate", 0.98, 0.0, 1.0 };
-  ofParameter<float> sameClusterToleranceParameter { "sameClusterTolerance", 0.2, 0.01, 1.0 };
+  ofParameter<float> sameClusterToleranceParameter { "sameClusterTolerance", 0.4, 0.01, 1.0 };
 
   ofParameterGroup crystalParameters { "crystal" };
-  ofParameter<int> sampleNotesParameter { "sampleNotes", 30, 5, 50 };
+  ofParameter<int> sampleNotesParameter { "sampleNotes", 50, 5, 200 };
 
   ofParameterGroup fadeParameters { "fade" };
   ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.9975, 0.9, 1.0 };
-  ofParameter<float> fadeDivisionsParameter { "fadeDivisions", 0.93, 0.9, 1.0 };
+  ofParameter<float> fadeDivisionsParameter { "fadeDivisions", 0.9, 0.8, 1.0 };
   ofParameter<float> fadeForegroundParameter { "fadeForeground", 0.996, 0.9, 1.0 };
   
   ofParameterGroup impulseParameters { "impulse" };
