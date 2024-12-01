@@ -41,6 +41,7 @@ private:
 
   void setupSom();
 
+  void drawConnections();
   void updateRecentNotes(float s, float t, float u, float v);
   void updateClusters();
   void decayClusters();
@@ -58,6 +59,8 @@ private:
 
   ofxSelfOrganizingMap som;
   ofFloatColor somColorAt(float x, float y) const;
+  bool somVisible;
+  ofImage somImage;
 
   MultiplyColorShader fadeShader;
   TranslateShader translateShader;
@@ -88,13 +91,13 @@ private:
   ofParameterGroup parameters;
   
   ofParameterGroup audioParameters { "audio" };
-  ofParameter<float> validLowerRmsParameter { "validLowerRms", 250.0, 100.0, 5000.0 };
+  ofParameter<float> validLowerRmsParameter { "validLowerRms", 150.0, 100.0, 5000.0 };
   ofParameter<float> validLowerPitchParameter { "validLowerPitch", 50.0, 50.0, 8000.0 };
   ofParameter<float> validUpperPitchParameter { "validUpperPitch", 5000.0, 50.0, 8000.0 };
-  ofParameter<float> minPitchParameter { "minPitch", 200.0, 0.0, 8000.0 };
-  ofParameter<float> maxPitchParameter { "maxPitch", 1800.0, 0.0, 8000.0 };
+  ofParameter<float> minPitchParameter { "minPitch", 150.0, 0.0, 8000.0 };
+  ofParameter<float> maxPitchParameter { "maxPitch", 1500.0, 0.0, 8000.0 };
   ofParameter<float> minRMSParameter { "minRMS", 0.0, 0.0, 6000.0 };
-  ofParameter<float> maxRMSParameter { "maxRMS", 4600.0, 0.0, 6000.0 };
+  ofParameter<float> maxRMSParameter { "maxRMS", 1000.0, 0.0, 6000.0 };
   ofParameter<float> minSpectralKurtosisParameter { "minSpectralKurtosis", 0.0, 0.0, 6000.0 };
   ofParameter<float> maxSpectralKurtosisParameter { "maxSpectralKurtosis", 25.0, 0.0, 6000.0 };
   ofParameter<float> minSpectralCentroidParameter { "minCentroidKurtosis", 0.4, 0.0, 10.0 };
@@ -110,9 +113,9 @@ private:
   ofParameter<int> sampleNotesParameter { "sampleNotes", 30, 5, 50 };
 
   ofParameterGroup fadeParameters { "fade" };
-  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.998, 0.9, 1.0 };
+  ofParameter<float> fadeCrystalsParameter { "fadeCrystals", 0.9975, 0.9, 1.0 };
   ofParameter<float> fadeDivisionsParameter { "fadeDivisions", 0.93, 0.9, 1.0 };
-  ofParameter<float> fadeForegroundParameter { "fadeForeground", 0.995, 0.9, 1.0 };
+  ofParameter<float> fadeForegroundParameter { "fadeForeground", 0.996, 0.9, 1.0 };
   
   ofParameterGroup impulseParameters { "impulse" };
   ofParameter<float> impulseRadiusParameter { "impulseRadius", 0.085, 0.01, 0.2 };

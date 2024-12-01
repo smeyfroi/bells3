@@ -25,10 +25,12 @@ void ofApp::setup(){
   // nightsong
 //  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
   // bells
-  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
   // treganna
 //  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav", "Jam-20240719-093508910/____-92_9_186_x_22141.oscs");
-  
+  // prokofiev
+  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20241129-100248316/____-46_137_90_x_22141-0-1.wav", "Jam-20241129-100248316/____-46_137_90_x_22141.oscs");
+
   audioDataProcessorPtr = std::make_shared<ofxAudioData::Processor>(audioAnalysisClientPtr);
   audioDataPlotsPtr = std::make_shared<ofxAudioData::Plots>(audioDataProcessorPtr);
   audioDataSpectrumPlotsPtr = std::make_shared<ofxAudioData::SpectrumPlots>(audioDataProcessorPtr);
@@ -53,6 +55,8 @@ void ofApp::setup(){
   maskShader.load();
   
   compositeFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_RGB);
+
+  somImage.allocate(Constants::SOM_WIDTH, Constants::SOM_HEIGHT, OF_IMAGE_COLOR);
 
   audioParameters.add(validLowerRmsParameter);
   audioParameters.add(validLowerPitchParameter);
@@ -86,10 +90,10 @@ void ofApp::setup(){
   parameters.add(impulseParameters);
 
   auto fluidParameterGroup = fluidSimulation.getParameterGroup();
-  fluidParameterGroup.getFloat("dt").set(0.02);
+  fluidParameterGroup.getFloat("dt").set(0.025);
   fluidParameterGroup.getFloat("vorticity").set(20.0);
-  fluidParameterGroup.getFloat("value:dissipation").set(0.999);
-  fluidParameterGroup.getFloat("velocity:dissipation").set(0.9999);
+  fluidParameterGroup.getFloat("value:dissipation").set(0.9995);
+  fluidParameterGroup.getFloat("velocity:dissipation").set(0.999);
   fluidParameterGroup.getInt("pressure:iterations").set(20);
   parameters.add(fluidParameterGroup);
   
@@ -99,6 +103,37 @@ void ofApp::setup(){
 }
 
 //--------------------------------------------------------------
+// TODO: do we need to extract these randoms?
+void drawSand(float x1, float y1, float x2, float y2, float density, float maxRadius) {
+  float dist = ofDist(x1, y1, x2, y2);
+  int grains = dist * density;
+  for (int i = 0; i < grains; i++) {
+    float pct = ofRandom(0.0, 1.0);
+    float x = ofLerp(x1, x2, pct);
+    float y = ofLerp(y1, y2, pct);
+    x += ofRandom(maxRadius*2.0) - maxRadius;
+    y += ofRandom(maxRadius*2.0) - maxRadius;
+    float r = 1.0 + ofRandom(maxRadius);
+    ofDrawCircle(x, y, r);
+  }
+}
+
+void ofApp::drawConnections() {
+  fluidSimulation.getFlowValuesFbo().getSource().begin();
+  ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+  float lastX = -1.0; float lastY = -1.0;
+  for (const auto [x, y] : recentNoteXYs) {
+    if (lastX > -1.0) {
+      ofFloatColor color = somColorAt(x, y); color.a = 0.05;
+      ofSetColor(color);
+      drawSand(lastX*Constants::FLUID_WIDTH, lastY*Constants::FLUID_HEIGHT, x*Constants::FLUID_WIDTH, y*Constants::FLUID_HEIGHT, 0.01, 2.0);
+//      ofDrawLine(lastX*Constants::FLUID_WIDTH, lastY*Constants::FLUID_HEIGHT, x*Constants::FLUID_WIDTH, y*Constants::FLUID_HEIGHT);
+    }
+    lastX = x; lastY = y;
+  }
+  fluidSimulation.getFlowValuesFbo().getSource().end();
+}
+
 void ofApp::updateRecentNotes(float s, float t, float u, float v) {
   TS_START("update-recent-notes");
   if (recentNoteXYs.size() > clusterSourceSamplesMaxParameter) {
@@ -107,19 +142,6 @@ void ofApp::updateRecentNotes(float s, float t, float u, float v) {
   }
   recentNoteXYs.push_back({ s, t });
   introspector.addCircle(s, t, 1.0/Constants::WINDOW_WIDTH*5.0, ofColor::yellow, true, 30); // introspection: small yellow circle for new raw source sample
-  fluidSimulation.getFlowValuesFbo().getSource().begin();
-  ofEnableBlendMode(OF_BLENDMODE_ADD);
-//  ofSetColor(ofFloatColor(1.0, 1.0, 1.0, 1.0) * 0.04);
-  float lastX = -1.0; float lastY = -1.0;
-  for (const auto [x, y] : recentNoteXYs) {
-    if (lastX > -1.0) {
-      ofFloatColor color = somColorAt(x, y); color.setBrightness(0.8); color.setSaturation(1.0);
-      ofSetColor(color * 0.001);
-      ofDrawLine(lastX, lastY, x, y);
-      lastX = x; lastY = y;
-    }
-  }
-  fluidSimulation.getFlowValuesFbo().getSource().end();
   TS_STOP("update-recent-notes");
 }
 
@@ -130,6 +152,7 @@ void ofApp::updateClusters() {
   {
     dkm::clustering_parameters<float> params { static_cast<uint32_t>(clusterCentresParameter) };
     params.set_random_seed(1000); // keep clusters stable
+    clusterResults = dkm::kmeans_lloyd(recentNoteXYs, params);
     clusterResults = dkm::kmeans_lloyd(recentNoteXYs, params);
   }
   TS_STOP("update-kmeans");
@@ -148,15 +171,16 @@ void ofApp::updateClusters() {
       });
       if (it == clusterCentres.end()) {
         // don't have this clusterCentre so make it
-        clusterCentres.push_back({ x, y, 0.0, 1.0 }); // start at age=1
-        introspector.addCircle(x, y, 15.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 10); // introspection: small red circle is new cluster centre
+        clusterCentres.push_back({ x, y, 0.0, 5.0 }); // start at age=1
+        introspector.addCircle(x, y, 7.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 10); // introspection: large red circle is new cluster centre
       } else {
-        // close to an existing one, so move existing cluster a little towards the new one
-        it->x = ofLerp(x, it->x, 0.05);
-        it->y = ofLerp(y, it->y, 0.05);
+        // TODO: could cull very close clusters here?
+        // close to an existing one, so move a little towards the new one
+        it->x = ofLerp(x, it->x, 0.3);
+        it->y = ofLerp(y, it->y, 0.3);
         // existing cluster so increase its age to preserve it
         it->w++;
-        introspector.addCircle(it->x, it->y, 3.0*1.0/Constants::WINDOW_WIDTH, ofColor::red, true, 25); // introspection: large red circle is existing cluster centre that continues to exist
+        introspector.addCircle(it->x, it->y, 2.0*1.0/Constants::WINDOW_WIDTH, ofColor::darkRed, true, 25); // introspection: smalli darkRed circle is existing cluster centre that continues to exist
       }
     }
   }
@@ -180,6 +204,17 @@ void ofApp::updateSom(float x, float y, float z) {
   TS_START("update-som");
   double instance[3] = { static_cast<double>(x), static_cast<double>(y), static_cast<double>(z) };
   som.updateMap(instance);
+
+  if (somVisible) {
+    for (int i = 0; i < Constants::SOM_WIDTH; i++) {
+      for (int j = 0; j < Constants::SOM_HEIGHT; j++) {
+        double * c = som.getMapAt(i,j);
+        ofFloatColor col(c[0], c[1], c[2]);
+        somImage.setColor(i, j, col);
+      }
+    }
+    somImage.update();
+  }
   TS_STOP("update-som");
 }
 
@@ -213,7 +248,12 @@ void ofApp::update() {
   fadeShader.render(divisionsFbo, {1.0, 1.0, 1.0, fadeDivisionsParameter});
   fadeShader.render(foregroundFbo, {1.0, 1.0, 1.0, fadeForegroundParameter});
   translateShader.render(foregroundFbo, {0.000, 0.0003});
+
+  updateClusters();
+  decayClusters();
   
+  drawConnections();
+
   std::vector<ofxAudioData::ValiditySpec> sampleValiditySpecs {
     {ofxAudioAnalysisClient::AnalysisScalar::rootMeanSquare, false, validLowerRmsParameter},
     {ofxAudioAnalysisClient::AnalysisScalar::pitch, false, validLowerPitchParameter},
@@ -230,8 +270,6 @@ void ofApp::update() {
     
     // update recent notes and clusters
     updateRecentNotes(s, t, u, v);
-    updateClusters();
-    decayClusters();
     
     updateSom(s, t, v);
     ofFloatColor somColor = somColorAt(s, t);
@@ -273,8 +311,8 @@ void ofApp::update() {
       TS_START("update-fluid-clusters");
       for (auto& centre : clusterCentres) {
         float x = centre[0]; float y = centre[1];
-        const float COL_FACTOR = 0.008;
-        ofFloatColor color = somColorAt(x, y) * COL_FACTOR; color.a = 0.001;
+        const float COL_FACTOR = 0.001;// 0.008;
+        ofFloatColor color = somColorAt(x, y) * COL_FACTOR; //color.a = 0.001;
         FluidSimulation::Impulse impulse {
           { x * Constants::FLUID_WIDTH, y * Constants::FLUID_HEIGHT },
           Constants::FLUID_WIDTH * impulseRadiusParameter,
@@ -330,7 +368,7 @@ void ofApp::update() {
         }
         
         // ignore for bounds too small
-        if (pathBounds.width > 1.0/100) {
+        if (pathBounds.width > 1.0/200.0) {
           
           // add constrained divider lines extending the path segments,
           // and draw them into fluid layer
@@ -339,8 +377,8 @@ void ofApp::update() {
             ofPushMatrix();
             ofScale(Constants::FLUID_WIDTH, Constants::FLUID_HEIGHT);
             ofEnableBlendMode(OF_BLENDMODE_ALPHA);
-            ofSetColor(ofFloatColor(0.0, 0.0, 0.0, 1.0));
-            float width = 4.0 * 1.0 / Constants::FLUID_WIDTH;
+            ofSetColor(ofFloatColor(0.0, 0.0, 0.0, 0.2));
+            float width = 3.0 * 1.0 / Constants::FLUID_WIDTH;
             for (int i = 0; i != sampledClusterNoteXYs.size(); i++) {
               if (auto dividerLine = dividedArea.addConstrainedDividerLine(sampledClusterNoteXYs[i],
                                                                            sampledClusterNoteXYs[(i + 1) % sampledClusterNoteXYs.size()])) {
@@ -390,7 +428,7 @@ void ofApp::update() {
             crystalFbo.getSource().begin();
             {
               ofEnableBlendMode(OF_BLENDMODE_ADD);
-              ofFloatColor fragmentColor = somColorAt(pathBounds.x, pathBounds.y)*0.3;
+              ofFloatColor fragmentColor = somColorAt(pathBounds.x, pathBounds.y)*0.1;
               ofSetColor(fragmentColor);
               maskShader.render(frozenFluid, crystalMaskFbo,
                                 crystalFbo.getWidth(), crystalFbo.getHeight(),
@@ -414,8 +452,8 @@ void ofApp::update() {
         ofEnableBlendMode(OF_BLENDMODE_ALPHA);
         ofPushMatrix();
         ofScale(Constants::FLUID_WIDTH);
-        const float lineWidth = 2.0 * 1.0 / Constants::FLUID_WIDTH;
-        ofColor color = ofFloatColor(1.0, 1.0, 1.0, 0.25);
+        const float lineWidth = 1.0 * 1.0 / Constants::FLUID_WIDTH;
+        ofColor color = ofFloatColor(1.0, 1.0, 1.0, 0.1);
         ofSetColor(color);
         dividedArea.draw(0.0, lineWidth, 0.0);
         ofPopMatrix();
@@ -448,13 +486,13 @@ void ofApp::update() {
     const ofFloatColor minorDividerColor { 0.0, 0.0, 0.0, 1.0 };
     dividedArea.draw({},
                      { minLineWidth, maxLineWidth, majorDividerColor },
-                     { minLineWidth/6.0f, minLineWidth/2.0f, minorDividerColor, 5000.0*1.0/1000.0 });
+                     { minLineWidth*0.7f, minLineWidth*0.9f, minorDividerColor, 0.7 });
     ofPopMatrix();
     divisionsFbo.getSource().end();
   }
   TS_STOP("update-draw-divisions");
   
-  if (dividedArea.constrainedDividerLines.size() > 2000) {
+  if (dividedArea.constrainedDividerLines.size() > 3000) {
     dividedArea.deleteEarlyConstrainedDividerLines(50);
   }
 }
@@ -504,6 +542,8 @@ ofFbo ofApp::drawComposite() {
 void ofApp::draw() {
   drawComposite().draw(0.0, 0.0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
   
+  if (somVisible) somImage.draw(0, 0, Constants::WINDOW_WIDTH, Constants::WINDOW_HEIGHT);
+  
   // introspection
   {
     TS_START("draw-introspection");
@@ -541,6 +581,7 @@ void ofApp::exit(){
 void ofApp::keyPressed(int key){
   if (audioAnalysisClientPtr->keyPressed(key)) return;
   if (key == OF_KEY_TAB) guiVisible = not guiVisible;
+  if (key == 'M') somVisible = not somVisible;
   {
     float plotHeight = ofGetWindowHeight() / 4.0;
     int plotIndex = ofGetMouseY() / plotHeight;
