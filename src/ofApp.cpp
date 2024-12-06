@@ -23,19 +23,17 @@ void ofApp::setup(){
   TIME_SAMPLE_SET_FRAMERATE(Constants::FRAME_RATE);
 
   // nightsong
-//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
+  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240402-094851837/____-46_137_90_x_22141-0-1.wav", "Jam-20240402-094851837/____-46_137_90_x_22141.oscs");
   // bells
 //  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240517-155805463/____-80_41_155_x_22141-0-1.wav", "Jam-20240517-155805463/____-80_41_155_x_22141.oscs");
   // treganna
 //  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20240719-093508910/____-92_9_186_x_22141-0-1.wav", "Jam-20240719-093508910/____-92_9_186_x_22141.oscs");
   // prokofiev
-  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20241129-100248316/____-46_137_90_x_22141-0-1.wav", "Jam-20241129-100248316/____-46_137_90_x_22141.oscs");
+//  audioAnalysisClientPtr = std::make_shared<ofxAudioAnalysisClient::FileClient>("Jam-20241129-100248316/____-46_137_90_x_22141-0-1.wav", "Jam-20241129-100248316/____-46_137_90_x_22141.oscs");
 
   audioDataProcessorPtr = std::make_shared<ofxAudioData::Processor>(audioAnalysisClientPtr);
   audioDataPlotsPtr = std::make_shared<ofxAudioData::Plots>(audioDataProcessorPtr);
   audioDataSpectrumPlotsPtr = std::make_shared<ofxAudioData::SpectrumPlots>(audioDataProcessorPtr);
-  
-  setupSom();
   
   fadeShader.load();
   translateShader.load();
@@ -43,7 +41,7 @@ void ofApp::setup(){
 
   fluidSimulation.setup({ Constants::FLUID_WIDTH, Constants::FLUID_HEIGHT });
   
-  divisionsFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_RGBA); // GL_RGBA32F); // 8 bit for ghosts of past lines
+  divisionsFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_RGBA);
   divisionsFbo.getSource().clearColorBuffer(ofFloatColor(0.0, 0.0, 0.0, 0.0));
   
   foregroundFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_RGBA32F);
@@ -56,6 +54,7 @@ void ofApp::setup(){
   
   compositeFbo.allocate(Constants::CANVAS_WIDTH, Constants::CANVAS_HEIGHT, GL_RGB);
 
+  setupSom();
   somImage.allocate(Constants::SOM_WIDTH, Constants::SOM_HEIGHT, OF_IMAGE_COLOR);
 
   audioParameters.add(validLowerRmsParameter);
